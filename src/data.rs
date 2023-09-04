@@ -1,6 +1,7 @@
+use crate::state::FloatType;
 use std::cmp::Ordering;
 
-const G1: [(f64, f64); 79] = [
+const G1: [(FloatType, FloatType); 79] = [
     (0.00, 0.2629),
     (0.05, 0.2558),
     (0.10, 0.2487),
@@ -82,7 +83,7 @@ const G1: [(f64, f64); 79] = [
     (5.00, 0.4988),
 ];
 
-const G7: [(f64, f64); 84] = [
+const G7: [(FloatType, FloatType); 84] = [
     (0.00, 0.1198),
     (0.05, 0.1197),
     (0.10, 0.1196),
@@ -169,20 +170,21 @@ const G7: [(f64, f64); 84] = [
     (5.00, 0.1618),
 ];
 
-pub fn interpolate(table: &[(f64, f64)], x: f64) -> f64 {
+pub fn lerp(x0: FloatType, y0: FloatType, x1: FloatType, y1: FloatType, x: FloatType) -> FloatType {
+    y0 + (y1 - y0) / (x1 - x0) * (x - x0)
+}
+
+pub fn interpolate(table: &[(FloatType, FloatType)], x: FloatType) -> FloatType {
     let n = table.len();
     match table.binary_search_by(|pair| pair.0.partial_cmp(&x).unwrap_or(Ordering::Equal)) {
-        Ok(i) => {
-            table[i].1
-        }
+        Ok(i) => table[i].1,
         Err(mut i) => {
             i = i.clamp(1, n - 1);
 
             let (x1, y1) = table[i];
             let (x0, y0) = table[i - 1];
-    
-            // Simple lerp
-            y0 + (y1 - y0) / (x1 - x0) * (x - x0)
+
+            lerp(x0, y0, x1, y1, x)
         }
     }
 }

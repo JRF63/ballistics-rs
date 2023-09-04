@@ -1,16 +1,10 @@
-use uom::si::{
-    f64::*,
-    mass_density::kilogram_per_cubic_meter,
-    pressure::pascal,
-    thermodynamic_temperature::{degree_celsius, kelvin},
-    velocity::meter_per_second,
-};
+use crate::state::FloatType;
 
 /// Calculates the saturation vapor pressure of water using the Arden Buck equation.
 ///
 /// https://en.wikipedia.org/wiki/Arden_Buck_equation
-pub fn calc_saturation_vapor_pressure_water(temp: ThermodynamicTemperature) -> Pressure {
-    let temp_celsius = temp.get::<degree_celsius>();
+pub fn calc_saturation_vapor_pressure_water(temp: FloatType) -> FloatType {
+    let temp_celsius = temp - 273.15;
 
     // Coefficients adjusted to give the pressure in Pascals
     let (a, b, c, d) = if temp_celsius > 0.0 {
@@ -19,71 +13,72 @@ pub fn calc_saturation_vapor_pressure_water(temp: ThermodynamicTemperature) -> P
         (611.15, 23.036, 333.7, 279.82)
     };
 
-    Pressure::new::<pascal>(
-        a * f64::exp((b - temp_celsius / c) * (temp_celsius / (d + temp_celsius))),
-    )
+    a * FloatType::exp((b - temp_celsius / c) * (temp_celsius / (d + temp_celsius)))
 }
 
 /// Calculates for the density of air, assuming air is an ideal gas.
 pub fn calc_air_density(
-    temp: ThermodynamicTemperature,
-    pressure: Pressure,
-    rh: f64,
-) -> MassDensity {
+    temp: FloatType,
+    pressure: FloatType,
+    rh: FloatType,
+) -> FloatType {
     // Precomputed because Rust does not support const eval for floats.
     // Equal to:
-    // let R: f64 = 8.31446261815324; // J/(K*mol)
-    // let M: f64 = 0.0289645; // kg/mol
-    // let rm: f64 = R / M;
-    let rm: f64 = 287.0570048905812;
-    let density = pressure.get::<pascal>() / (rm * temp.get::<kelvin>());
+    // let R: FloatType = 8.31446261815324; // J/(K*mol)
+    // let M: FloatType = 0.0289645; // kg/mol
+    // let rm: FloatType = R / M;
+    let rm: FloatType = 287.0570048905812;
+    let density = pressure / (rm * temp);
 
     // Equation 8.24 of Modern Exterior Ballistics
     // Presumably corrects for the lower molar mass of humid air
     let p_wv = calc_saturation_vapor_pressure_water(temp);
-    let correction_factor = 1.0 - 0.00378 * rh * p_wv.get::<pascal>() / 101325.0;
+    let correction_factor = 1.0 - 0.00378 * rh * p_wv / 101325.0;
 
-    MassDensity::new::<kilogram_per_cubic_meter>(density * correction_factor)
+    density * correction_factor
 }
 
 /// Calculates the speed of sound, assuming air is an ideal gas.
-pub fn calc_speed_sound(temp: ThermodynamicTemperature, _pressure: Pressure, rh: f64) -> Velocity {
+pub fn calc_speed_sound(
+    temp: FloatType,
+    _pressure: FloatType,
+    rh: FloatType,
+) -> FloatType {
     // Precomputed because Rust does not support const eval for floats.
     // Equal to:
-    // let gamma: f64 = 1.4; // unitless
-    // let R: f64 = 8.31446261815324; // J/(K*mol)
-    // let M: f64 = 0.0289645; // kg/mol
-    // let c: f64 = (gamma * R / M).sqrt();
-    let c: f64 = 20.046940086876443;
-    let speed = c * temp.get::<kelvin>().sqrt();
+    // let gamma: FloatType = 1.4; // unitless
+    // let R: FloatType = 8.31446261815324; // J/(K*mol)
+    // let M: FloatType = 0.0289645; // kg/mol
+    // let c: FloatType = (gamma * R / M).sqrt();
+    let c: FloatType = 20.046940086876443;
+    let speed = c * temp.sqrt();
 
     // Equation 8.26 of Modern Exterior Ballistics
     // Presumably corrects for the lower molar mass of humid air
     let p_wv = calc_saturation_vapor_pressure_water(temp);
-    let correction_factor = 1.0 + 0.0014 * rh * p_wv.get::<pascal>() / 101325.0;
+    let correction_factor = 1.0 + 0.0014 * rh * p_wv / 101325.0;
 
-    Velocity::new::<meter_per_second>(speed * correction_factor)
+    speed * correction_factor
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uom::si::pressure::kilopascal;
 
-    const EPSILON: f64 = 1e-3;
+    const EPSILON: FloatType = 1e-3;
 
-    fn almost_equal(val: f64, reference: f64, epsilon: f64) -> bool {
+    fn almost_equal(val: FloatType, reference: FloatType, epsilon: FloatType) -> bool {
         (val - reference).abs() < epsilon * reference.abs()
     }
 
     #[test]
     fn test_calc_air_density() {
-        let temp = ThermodynamicTemperature::new::<degree_celsius>(0.0);
-        let pressure = Pressure::new::<pascal>(101325.0);
+        let temp = 273.15;
+        let pressure = 101325.0;
         let rh = 0.0;
 
         assert!(almost_equal(
-            calc_air_density(temp, pressure, rh).get::<kilogram_per_cubic_meter>(),
+            calc_air_density(temp, pressure, rh),
             1.2922521350727452,
             EPSILON
         ))
@@ -91,12 +86,12 @@ mod tests {
 
     #[test]
     fn test_calc_speed_sound() {
-        let temp = ThermodynamicTemperature::new::<degree_celsius>(0.0);
-        let pressure = Pressure::new::<pascal>(101325.0);
+        let temp = 273.15;
+        let pressure = 101325.0;
         let rh = 0.0;
 
         assert!(almost_equal(
-            calc_speed_sound(temp, pressure, rh).get::<meter_per_second>(),
+            calc_speed_sound(temp, pressure, rh),
             331.3207950615342,
             EPSILON
         ))
@@ -106,7 +101,7 @@ mod tests {
     fn test_calc_water_vapor_pressure() {
         // https://en.wikipedia.org/wiki/Vapour_pressure_of_water
         // Units in (degC, kPa)
-        let reference: &[(f64, f64)] = &[
+        let reference: &[(FloatType, FloatType)] = &[
             (0.0, 0.6113),
             (5.0, 0.8726),
             (10.0, 1.2281),
@@ -130,15 +125,9 @@ mod tests {
             (100.0, 101.3200),
         ];
 
-        for (temp, pressure_ref) in reference {
-            let pressure = calc_saturation_vapor_pressure_water(ThermodynamicTemperature::new::<
-                degree_celsius,
-            >(*temp));
-            assert!(almost_equal(
-                pressure.get::<kilopascal>(),
-                *pressure_ref,
-                EPSILON
-            ));
+        for (temp_celsius, pressure_ref) in reference {
+            let pressure = calc_saturation_vapor_pressure_water(temp_celsius + 273.15);
+            assert!(almost_equal(pressure, pressure_ref * 1e3, EPSILON));
         }
     }
 }
