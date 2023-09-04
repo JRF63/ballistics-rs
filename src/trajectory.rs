@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 pub fn calc_trajectory<F, G>(
     x0: Vec3,
     v0: Vec3,
-    cd_func: F,
+    drag_func: F,
     wind: Vec3,
     temp: FloatType,
     pressure: FloatType,
@@ -31,7 +31,7 @@ pub fn calc_trajectory<F, G>(
         let mach_num = speed / speed_sound;
 
         let dx = state.vel;
-        let dv = vw * (-(air_density * cd_func(mach_num)) * speed) + GRAVITY_ACCEL;
+        let dv = vw * (-(air_density * drag_func(mach_num)) * speed) + GRAVITY_ACCEL;
 
         State::new(dx, dv)
     };
@@ -49,7 +49,7 @@ pub fn calc_trajectory<F, G>(
 pub fn solve_initial_velocity<F>(
     x0: Vec3,
     muzzle_speed: FloatType,
-    cd_func: F,
+    drag_func: F,
     zero_range: FloatType,
     zero_elevation: FloatType,
     wind: Vec3,
@@ -139,7 +139,7 @@ where
         calc_trajectory(
             x0,
             v_guess,
-            cd_func,
+            drag_func,
             wind,
             temp,
             pressure,
@@ -196,5 +196,43 @@ where
         None
     } else {
         Some((ver_angle, hor_angle))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPSILON: FloatType = 1e-3;
+
+    // Example 8.1 of Modern Exterior Ballistics
+    #[test]
+    fn test_vacuum_trajectory() {
+        let muzzle_speed = 80.0;
+        let firing_angle = FloatType::to_radians(2005.03 / 60.0);
+        let x0 = Vec3::ZERO;
+        let v0 = muzzle_speed * Vec3::new(firing_angle.cos(), 0.0, firing_angle.sin());
+        let wind = Vec3::ZERO;
+        let temp = 273.15;
+        let pressure = 101325.0;
+        let rh = 0.0;
+        let elevation = 0.0;
+        let dt = 0.01;
+        let t_max = 10.0;
+
+        let drag_func = |_: FloatType| -> FloatType { 0.0 };
+
+        let stop_eval = |state: &State, t: FloatType| -> bool {
+            let pos = x0 + v0 * t + GRAVITY_ACCEL / 2.0 * t * t;
+            let vel = v0 + GRAVITY_ACCEL * t;
+
+            assert!((state.pos - pos).length() < EPSILON);
+            assert!((state.vel - vel).length() < EPSILON);
+            false
+        };
+
+        calc_trajectory(
+            x0, v0, drag_func, wind, temp, pressure, rh, elevation, dt, t_max, stop_eval,
+        );
     }
 }
