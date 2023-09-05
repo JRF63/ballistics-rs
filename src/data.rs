@@ -1,5 +1,14 @@
-use crate::state::FloatType;
-use std::cmp::Ordering;
+use crate::state::{FloatType, PI};
+use std::{
+    cmp::Ordering,
+    ops::{Add, Mul},
+};
+
+#[derive(Clone, Copy)]
+pub enum StandardDragFunction {
+    G1,
+    G7,
+}
 
 const G1: [(FloatType, FloatType); 79] = [
     (0.00, 0.2629),
@@ -170,11 +179,20 @@ const G7: [(FloatType, FloatType); 84] = [
     (5.00, 0.1618),
 ];
 
-pub fn lerp(x0: FloatType, y0: FloatType, x1: FloatType, y1: FloatType, x: FloatType) -> FloatType {
-    y0 + (y1 - y0) / (x1 - x0) * (x - x0)
+/// Tests if `val` is almost equal to `reference`.
+pub fn almost_equal(val: FloatType, reference: FloatType, epsilon: FloatType) -> bool {
+    (val - reference).abs() <= epsilon * reference.abs()
 }
 
-pub fn interpolate(table: &[(FloatType, FloatType)], x: FloatType) -> FloatType {
+/// Linear interpolation between v0 and v1.
+pub fn lerp<T>(v0: T, v1: T, alpha: FloatType) -> T
+where
+    T: Add<Output = T> + Mul<FloatType, Output = T>,
+{
+    v0 * (1.0 - alpha) + v1 * alpha
+}
+
+fn interpolate_from_table(table: &[(FloatType, FloatType)], x: FloatType) -> FloatType {
     let n = table.len();
     match table.binary_search_by(|pair| pair.0.partial_cmp(&x).unwrap_or(Ordering::Equal)) {
         Ok(i) => table[i].1,
@@ -184,9 +202,29 @@ pub fn interpolate(table: &[(FloatType, FloatType)], x: FloatType) -> FloatType 
             let (x1, y1) = table[i];
             let (x0, y0) = table[i - 1];
 
-            lerp(x0, y0, x1, y1, x)
+            let alpha = (x - x0) / (x1 - x0);
+            lerp(y0, y1, alpha)
         }
     }
+}
+
+pub fn create_standard_drag_function(
+    drag_function: StandardDragFunction,
+    bc: FloatType,
+) -> impl Fn(FloatType) -> FloatType + Copy {
+    let table: &'static [(FloatType, FloatType)] = match drag_function {
+        StandardDragFunction::G1 => &G1,
+        StandardDragFunction::G7 => &G7,
+    };
+
+    let k = PI / (8.0 * bc);
+
+    let drag_function = move |mach_num: FloatType| -> FloatType {
+        let cd = interpolate_from_table(table, mach_num);
+        k * cd
+    };
+
+    drag_function
 }
 
 #[cfg(test)]
@@ -199,9 +237,9 @@ mod tests {
         let first = table.first().unwrap();
         let last = table.last().unwrap();
 
-        assert_eq!(interpolate(table, first.0), first.1);
-        assert_eq!(interpolate(table, last.0), last.1);
-        assert!(interpolate(table, first.0 - 0.05) > first.1);
-        assert!(interpolate(table, last.0 + 0.05) < last.1);
+        assert_eq!(interpolate_from_table(table, first.0), first.1);
+        assert_eq!(interpolate_from_table(table, last.0), last.1);
+        assert!(interpolate_from_table(table, first.0 - 0.05) > first.1);
+        assert!(interpolate_from_table(table, last.0 + 0.05) < last.1);
     }
 }

@@ -64,12 +64,9 @@ pub fn calc_speed_sound(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::almost_equal;
 
     const EPSILON: FloatType = 1e-3;
-
-    fn almost_equal(val: FloatType, reference: FloatType, epsilon: FloatType) -> bool {
-        (val - reference).abs() < epsilon * reference.abs()
-    }
 
     #[test]
     fn test_calc_air_density() {

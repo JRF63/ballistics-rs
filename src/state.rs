@@ -1,17 +1,18 @@
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
 pub type FloatType = f64;
-pub type Vec3 = glam::f64::DVec3;
-pub const GRAVITY_ACCEL: Vec3 = Vec3::new(0.0, 0.0, -9.80665);
+pub type Vector3 = glam::f64::DVec3;
+pub const GRAVITY_ACCEL: Vector3 = Vector3::new(0.0, 0.0, -9.80665);
+pub const PI: FloatType = std::f64::consts::PI;
 
 #[derive(Clone, Copy)]
 pub struct State {
-    pub pos: Vec3,
-    pub vel: Vec3,
+    pub pos: Vector3,
+    pub vel: Vector3,
 }
 
 impl State {
-    pub fn new(x0: Vec3, v0: Vec3) -> Self {
+    pub fn new(x0: Vector3, v0: Vector3) -> Self {
         Self { pos: x0, vel: v0 }
     }
 }
