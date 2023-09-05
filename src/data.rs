@@ -1,8 +1,5 @@
 use crate::state::{FloatType, PI};
-use std::{
-    cmp::Ordering,
-    ops::{Add, Mul},
-};
+use std::ops::{Add, Mul};
 
 #[derive(Clone, Copy)]
 pub enum StandardDragFunction {
@@ -192,22 +189,6 @@ where
     v0 * (1.0 - alpha) + v1 * alpha
 }
 
-fn interpolate_from_table(table: &[(FloatType, FloatType)], x: FloatType) -> FloatType {
-    let n = table.len();
-    match table.binary_search_by(|pair| pair.0.partial_cmp(&x).unwrap_or(Ordering::Equal)) {
-        Ok(i) => table[i].1,
-        Err(mut i) => {
-            i = i.clamp(1, n - 1);
-
-            let (x1, y1) = table[i];
-            let (x0, y0) = table[i - 1];
-
-            let alpha = (x - x0) / (x1 - x0);
-            lerp(y0, y1, alpha)
-        }
-    }
-}
-
 pub fn create_standard_drag_function(
     drag_function: StandardDragFunction,
     bc: FloatType,
@@ -225,6 +206,22 @@ pub fn create_standard_drag_function(
     };
 
     drag_function
+}
+
+fn interpolate_from_table(table: &[(FloatType, FloatType)], x: FloatType) -> FloatType {
+    match table.binary_search_by(|pair| pair.0.total_cmp(&x)) {
+        Ok(i) => table[i].1,
+        Err(mut i) => {
+            i = i.clamp(1, table.len() - 1);
+
+            if let (Some(&(x1, y1)), Some(&(x0, y0))) = (table.get(i), table.get(i - 1)) {
+                let alpha = (x - x0) / (x1 - x0);
+                lerp(y0, y1, alpha)
+            } else {
+                FloatType::NAN
+            }
+        }
+    }
 }
 
 #[cfg(test)]

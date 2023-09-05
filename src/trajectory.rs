@@ -192,7 +192,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::{create_standard_drag_function, StandardDragFunction, almost_equal};
+    use crate::data::{almost_equal, create_standard_drag_function, StandardDragFunction};
 
     const EPSILON: FloatType = 1e-3;
 
@@ -295,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flat_fire_trajectory_no_winds() {
+    fn test_flat_fire_trajectory_no_wind() {
         const KG_PER_LB: FloatType = 0.45359237;
         const M_PER_IN: FloatType = 0.0254;
         const PASCALS_PER_MILLIBAR: FloatType = 100.0;
@@ -356,11 +356,84 @@ mod tests {
             let z = (state.pos.z / M_PER_IN * 10.0).round() / 10.0;
             let speed = (state.vel.length() * 10.0).round() / 10.0;
             let t = (t * 1e3).round() / 1e3;
-        
+
             assert!(almost_equal(x, ref_data.0, EPSILON));
             assert!(almost_equal(z, ref_data.1, EPSILON));
             assert!(almost_equal(speed, ref_data.2, EPSILON));
             assert!(almost_equal(t, ref_data.3, EPSILON));
+        }
+    }
+
+    #[test]
+    fn test_flat_fire_trajectory_strong_wind() {
+        const KG_PER_LB: FloatType = 0.45359237;
+        const M_PER_IN: FloatType = 0.0254;
+        const PASCALS_PER_MILLIBAR: FloatType = 100.0;
+        const KELVIN_OFFSET: FloatType = 273.15;
+
+        // Validation data using JBM Ballistics calc
+        // https://www.jbmballistics.com/cgi-bin/jbmtraj-5.1.cgi
+        let reference: &[(FloatType, FloatType, FloatType, FloatType, FloatType)] = &[
+            (0.0, -1.5, 0.0, 1000.0, 0.000),
+            (100.0, -3.5, 0.7, 933.3, 0.104),
+            (200.0, -10.0, 2.9, 869.9, 0.215),
+            (300.0, -21.6, 6.6, 809.3, 0.334),
+            (400.0, -39.0, 12.2, 751.2, 0.462),
+            (500.0, -63.4, 19.7, 695.6, 0.600),
+            (600.0, -95.7, 29.5, 642.3, 0.750),
+            (700.0, -137.5, 41.8, 591.5, 0.912),
+            (800.0, -190.2, 56.8, 543.3, 1.089),
+            (900.0, -256.2, 75.0, 498.1, 1.281),
+            (1000.0, -337.7, 96.6, 456.4, 1.491),
+            (1100.0, -437.8, 122.0, 418.7, 1.720),
+            (1200.0, -560.0, 151.4, 385.7, 1.969),
+            (1300.0, -708.2, 184.7, 358.1, 2.238),
+            (1400.0, -886.5, 221.9, 336.1, 2.527),
+            (1500.0, -1099.1, 262.5, 318.8, 2.834),
+            (1600.0, -1349.8, 306.1, 304.9, 3.155),
+            (1700.0, -1642.2, 352.5, 293.1, 3.491),
+            (1800.0, -1979.9, 401.5, 282.9, 3.839),
+            (1900.0, -2366.2, 452.9, 273.7, 4.201),
+            (2000.0, -2804.6, 506.7, 265.4, 4.574),
+        ];
+
+        let muzzle_speed = 1000.0;
+        let bc = 0.5 * KG_PER_LB / (M_PER_IN * M_PER_IN);
+        let sight_height = 1.5 * M_PER_IN;
+        let wind_speed = 5.0; // 5 m/s to the right
+        let wind = Vector3::new(0.0, wind_speed, 0.0);
+        let temp = 25.0 + KELVIN_OFFSET; // 25 degC
+        let pressure = 1013.25 * PASCALS_PER_MILLIBAR; // 1013.25 millibars
+        let rh = 0.0;
+        let elevation = 0.0;
+        let dt = 0.01;
+        let t_max = 10.0;
+
+        let x0 = Vector3::new(0.0, 0.0, elevation - sight_height);
+        let v0 = Vector3::new(muzzle_speed, 0.0, 0.0);
+
+        let drag_func = create_standard_drag_function(StandardDragFunction::G1, bc);
+
+        let ranges: Vec<_> = reference.iter().map(|x| x.0 as FloatType).collect();
+
+        let trajectory = calc_trajectory_on_range_intervals(
+            x0, v0, drag_func, wind, temp, pressure, rh, elevation, dt, t_max, ranges,
+        );
+
+        assert_eq!(reference.len(), trajectory.len());
+
+        for ((state, t), ref_data) in trajectory.iter().zip(reference) {
+            let x = state.pos.x.round();
+            let z = (state.pos.z / M_PER_IN * 10.0).round() / 10.0;
+            let y = (state.pos.y / M_PER_IN * 10.0).round() / 10.0;
+            let speed = (state.vel.length() * 10.0).round() / 10.0;
+            let t = (t * 1e3).round() / 1e3;
+
+            assert!(almost_equal(x, ref_data.0, EPSILON));
+            assert!(almost_equal(z, ref_data.1, EPSILON));
+            assert!(almost_equal(y, ref_data.2, EPSILON));
+            assert!(almost_equal(speed, ref_data.3, EPSILON));
+            assert!(almost_equal(t, ref_data.4, EPSILON));
         }
     }
 }
