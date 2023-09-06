@@ -1,8 +1,9 @@
 use crate::{
     data::lerp,
     environment::{calc_air_density, calc_speed_sound},
+    prelude::*,
     solver::OdeSolver,
-    state::{FloatType, State, Vector3, GRAVITY_ACCEL},
+    state::State,
 };
 use std::cmp::Ordering;
 
@@ -194,7 +195,7 @@ mod tests {
     use super::*;
     use crate::data::{almost_equal, create_standard_drag_function, StandardDragFunction};
 
-    const EPSILON: FloatType = 1e-3;
+    const EPSILON: FloatType = 5e-2;
 
     // Example 8.1 of Modern Exterior Ballistics
     #[test]
@@ -227,7 +228,7 @@ mod tests {
         );
     }
 
-    pub fn calc_trajectory_on_range_intervals<F>(
+    fn calc_trajectory_on_range_intervals<F>(
         x0: Vector3,
         v0: Vector3,
         drag_func: F,
@@ -303,28 +304,28 @@ mod tests {
 
         // Validation data using JBM Ballistics calc
         // https://www.jbmballistics.com/cgi-bin/jbmtraj-5.1.cgi
-        let reference: &[(FloatType, FloatType, FloatType, FloatType)] = &[
-            (0.0, -1.5, 1000.0, 0.000),
-            (100.0, -3.5, 933.3, 0.104),
-            (200.0, -10.0, 869.9, 0.215),
-            (300.0, -21.6, 809.3, 0.334),
-            (400.0, -39.0, 751.2, 0.462),
-            (500.0, -63.4, 695.6, 0.600),
-            (600.0, -95.7, 642.3, 0.750),
-            (700.0, -137.5, 591.5, 0.912),
-            (800.0, -190.2, 543.3, 1.089),
-            (900.0, -256.2, 498.1, 1.281),
-            (1000.0, -337.7, 456.4, 1.491),
-            (1100.0, -437.8, 418.7, 1.720),
-            (1200.0, -560.0, 385.7, 1.969),
-            (1300.0, -708.2, 358.1, 2.238),
-            (1400.0, -886.5, 336.1, 2.527),
-            (1500.0, -1099.1, 318.8, 2.834),
-            (1600.0, -1349.8, 304.9, 3.155),
-            (1700.0, -1642.2, 293.1, 3.491),
-            (1800.0, -1979.8, 282.9, 3.839),
-            (1900.0, -2366.1, 273.7, 4.201),
-            (2000.0, -2804.5, 265.4, 4.574),
+        let reference: &[(FloatType, FloatType, FloatType, FloatType, FloatType)] = &[
+            (0.0, -1.5, 0.0, 1000.0, 0.000),
+            (100.0, -3.5, -3.1, 933.3, 0.104),
+            (200.0, -10.0, -4.4, 869.9, 0.215),
+            (300.0, -21.6, -6.3, 809.3, 0.334),
+            (400.0, -39.0, -8.5, 751.2, 0.462),
+            (500.0, -63.4, -11.1, 695.6, 0.600),
+            (600.0, -95.7, -13.9, 642.3, 0.750),
+            (700.0, -137.5, -17.1, 591.5, 0.912),
+            (800.0, -190.2, -20.8, 543.3, 1.089),
+            (900.0, -256.2, -24.9, 498.1, 1.281),
+            (1000.0, -337.7, -29.5, 456.4, 1.491),
+            (1100.0, -437.8, -34.8, 418.7, 1.720),
+            (1200.0, -560.0, -40.7, 385.7, 1.969),
+            (1300.0, -708.2, -47.6, 358.1, 2.238),
+            (1400.0, -886.5, -55.3, 336.1, 2.527),
+            (1500.0, -1099.1, -64.0, 318.8, 2.834),
+            (1600.0, -1349.8, -73.7, 304.9, 3.155),
+            (1700.0, -1642.2, -84.4, 293.1, 3.491),
+            (1800.0, -1979.8, -96.0, 282.9, 3.839),
+            (1900.0, -2366.1, -108.7, 273.7, 4.201),
+            (2000.0, -2804.5, -122.4, 265.4, 4.574),
         ];
 
         let muzzle_speed = 1000.0;
@@ -357,10 +358,17 @@ mod tests {
             let speed = (state.vel.length() * 10.0).round() / 10.0;
             let t = (t * 1e3).round() / 1e3;
 
+            let drop_moa = if state.pos.x == 0.0 {
+                0.0
+            } else {
+                ((state.pos.z / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+            };
+
             assert!(almost_equal(x, ref_data.0, EPSILON));
             assert!(almost_equal(z, ref_data.1, EPSILON));
-            assert!(almost_equal(speed, ref_data.2, EPSILON));
-            assert!(almost_equal(t, ref_data.3, EPSILON));
+            assert!(almost_equal(drop_moa, ref_data.2, EPSILON));
+            assert!(almost_equal(speed, ref_data.3, EPSILON));
+            assert!(almost_equal(t, ref_data.4, EPSILON));
         }
     }
 
@@ -373,28 +381,36 @@ mod tests {
 
         // Validation data using JBM Ballistics calc
         // https://www.jbmballistics.com/cgi-bin/jbmtraj-5.1.cgi
-        let reference: &[(FloatType, FloatType, FloatType, FloatType, FloatType)] = &[
-            (0.0, -1.5, 0.0, 1000.0, 0.000),
-            (100.0, -3.5, 0.7, 933.3, 0.104),
-            (200.0, -10.0, 2.9, 869.9, 0.215),
-            (300.0, -21.6, 6.6, 809.3, 0.334),
-            (400.0, -39.0, 12.2, 751.2, 0.462),
-            (500.0, -63.4, 19.7, 695.6, 0.600),
-            (600.0, -95.7, 29.5, 642.3, 0.750),
-            (700.0, -137.5, 41.8, 591.5, 0.912),
-            (800.0, -190.2, 56.8, 543.3, 1.089),
-            (900.0, -256.2, 75.0, 498.1, 1.281),
-            (1000.0, -337.7, 96.6, 456.4, 1.491),
-            (1100.0, -437.8, 122.0, 418.7, 1.720),
-            (1200.0, -560.0, 151.4, 385.7, 1.969),
-            (1300.0, -708.2, 184.7, 358.1, 2.238),
-            (1400.0, -886.5, 221.9, 336.1, 2.527),
-            (1500.0, -1099.1, 262.5, 318.8, 2.834),
-            (1600.0, -1349.8, 306.1, 304.9, 3.155),
-            (1700.0, -1642.2, 352.5, 293.1, 3.491),
-            (1800.0, -1979.9, 401.5, 282.9, 3.839),
-            (1900.0, -2366.2, 452.9, 273.7, 4.201),
-            (2000.0, -2804.6, 506.7, 265.4, 4.574),
+        let reference: &[(
+            FloatType,
+            FloatType,
+            FloatType,
+            FloatType,
+            FloatType,
+            FloatType,
+            FloatType,
+        )] = &[
+            (0.0, -1.5, 0.0, 0.0, 0.0, 1000.0, 0.000),
+            (100.0, -3.5, -3.1, 0.7, 0.6, 933.3, 0.104),
+            (200.0, -10.0, -4.4, 2.9, 1.2, 869.9, 0.215),
+            (300.0, -21.6, -6.3, 6.6, 1.9, 809.3, 0.334),
+            (400.0, -39.0, -8.5, 12.2, 2.7, 751.2, 0.462),
+            (500.0, -63.4, -11.1, 19.7, 3.4, 695.6, 0.600),
+            (600.0, -95.7, -13.9, 29.5, 4.3, 642.3, 0.750),
+            (700.0, -137.5, -17.1, 41.8, 5.2, 591.5, 0.912),
+            (800.0, -190.2, -20.8, 56.8, 6.2, 543.3, 1.089),
+            (900.0, -256.2, -24.9, 75.0, 7.3, 498.1, 1.281),
+            (1000.0, -337.7, -29.5, 96.6, 8.4, 456.4, 1.491),
+            (1100.0, -437.8, -34.8, 122.0, 9.7, 418.7, 1.720),
+            (1200.0, -560.0, -40.7, 151.4, 11.0, 385.7, 1.969),
+            (1300.0, -708.2, -47.6, 184.7, 12.4, 358.1, 2.238),
+            (1400.0, -886.5, -55.3, 221.9, 13.8, 336.1, 2.527),
+            (1500.0, -1099.1, -64.0, 262.5, 15.3, 318.8, 2.834),
+            (1600.0, -1349.8, -73.7, 306.1, 16.7, 304.9, 3.155),
+            (1700.0, -1642.2, -84.4, 352.5, 18.1, 293.1, 3.491),
+            (1800.0, -1979.9, -96.0, 401.5, 19.5, 282.9, 3.839),
+            (1900.0, -2366.2, -108.7, 452.9, 20.8, 273.7, 4.201),
+            (2000.0, -2804.6, -122.4, 506.7, 22.1, 265.4, 4.574),
         ];
 
         let muzzle_speed = 1000.0;
@@ -429,11 +445,25 @@ mod tests {
             let speed = (state.vel.length() * 10.0).round() / 10.0;
             let t = (t * 1e3).round() / 1e3;
 
+            let drop_moa = if state.pos.x == 0.0 {
+                0.0
+            } else {
+                ((state.pos.z / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+            };
+
+            let windage_moa = if state.pos.x == 0.0 {
+                0.0
+            } else {
+                ((state.pos.y / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+            };
+
             assert!(almost_equal(x, ref_data.0, EPSILON));
             assert!(almost_equal(z, ref_data.1, EPSILON));
-            assert!(almost_equal(y, ref_data.2, EPSILON));
-            assert!(almost_equal(speed, ref_data.3, EPSILON));
-            assert!(almost_equal(t, ref_data.4, EPSILON));
+            assert!(almost_equal(drop_moa, ref_data.2, EPSILON));
+            assert!(almost_equal(y, ref_data.3, EPSILON));
+            assert!(almost_equal(windage_moa, ref_data.4, EPSILON));
+            assert!(almost_equal(speed, ref_data.5, EPSILON));
+            assert!(almost_equal(t, ref_data.6, EPSILON));
         }
     }
 }

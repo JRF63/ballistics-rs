@@ -1,5 +1,6 @@
 mod data;
 mod environment;
+mod prelude;
 mod solver;
 mod state;
 mod trajectory;

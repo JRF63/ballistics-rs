@@ -1,4 +1,4 @@
-use crate::state::{FloatType, PI};
+use crate::prelude::*;
 use std::ops::{Add, Mul};
 
 #[derive(Clone, Copy)]

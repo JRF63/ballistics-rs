@@ -1,4 +1,4 @@
-use crate::state::FloatType;
+use crate::prelude::*;
 
 /// Calculates the saturation vapor pressure of water using the Arden Buck equation.
 ///
