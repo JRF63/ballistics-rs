@@ -11,3 +11,8 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     fn alert(s: &str);
 }
+
+#[wasm_bindgen]
+pub fn greet() {
+    alert("Hello, {{project-name}}!");
+}
