@@ -1,5 +1,4 @@
 use crate::{
-    data::lerp,
     environment::{calc_air_density, calc_speed_sound},
     prelude::*,
     solver::OdeSolver,
@@ -21,7 +20,7 @@ pub fn calc_trajectory<F, G>(
     mut stop_eval: G,
 ) where
     F: Fn(FloatType) -> FloatType,
-    G: FnMut(&State, FloatType) -> bool,
+    G: FnMut(&OdeSolver) -> bool,
 {
     let derivative = |state: State| -> State {
         let air_density = calc_air_density(temp, pressure, rh);
@@ -40,8 +39,9 @@ pub fn calc_trajectory<F, G>(
     let y0 = State::new(x0, v0);
     let mut solver = OdeSolver::new(y0, derivative, dt);
     loop {
-        let (state, time) = solver.step(derivative);
-        if time > t_max || stop_eval(state, time) {
+        solver.step(derivative);
+        let (_, t) = solver.current_state();
+        if t > t_max || stop_eval(&solver) {
             break;
         }
     }
@@ -81,12 +81,10 @@ where
     let mut hor_converged = false;
 
     for _ in 0..MAX_CONVERGENCE_STEPS {
-        if ver_converged && hor_converged {
-            break;
-        }
-
-        if ver_angle == ver_angle_old && hor_angle == hor_angle_old {
-            break;
+        if (ver_converged && hor_converged)
+            || (ver_angle == ver_angle_old && hor_angle == hor_angle_old)
+        {
+            return Some((ver_angle, hor_angle));
         }
 
         ver_angle_old = ver_angle;
@@ -99,27 +97,27 @@ where
                 ver_angle.sin() * hor_angle.cos(),
             );
 
-        let mut state_old = State::new(x0, v_guess);
         let mut drop = FloatType::NAN;
         let mut windage = FloatType::NAN;
 
-        let range_reached = |state: &State, _: FloatType| -> bool {
+        let range_reached = |solver: &OdeSolver| -> bool {
+            let (state, _) = solver.current_state();
             match state.pos.x.partial_cmp(&zero_range) {
                 Some(ord) => match ord {
-                    Ordering::Less => {
-                        state_old = state.clone();
-                        false
-                    }
+                    Ordering::Less => false,
                     Ordering::Equal => {
                         drop = state.pos.z;
                         windage = state.pos.y;
                         true
                     }
                     Ordering::Greater => {
-                        let alpha =
-                            (zero_range - state_old.pos.x) / (state.pos.x - state_old.pos.x);
-                        drop = lerp(state_old.pos.z, state.pos.z, alpha);
-                        windage = lerp(state_old.pos.y, state.pos.y, alpha);
+                        let extractor = |state: &State| -> FloatType { state.pos.x };
+                        let event = |x: FloatType| -> FloatType { x - zero_range };
+                        if let Some((state, _)) = solver.find_state_at_event(extractor, event) {
+                            drop = state.pos.z;
+                            windage = state.pos.y;
+                        }
+                        // Stop evaluation whether interpolation is successful or not
                         true
                     }
                 },
@@ -183,11 +181,7 @@ where
         hor_angle = (hor_angle_left + hor_angle_right) / 2.0;
     }
 
-    if !(ver_converged && hor_converged) {
-        None
-    } else {
-        Some((ver_angle, hor_angle))
-    }
+    None
 }
 
 #[cfg(test)]
@@ -219,7 +213,8 @@ mod tests {
 
         let drag_func = |_: FloatType| -> FloatType { 0.0 };
 
-        let stop_eval = |state: &State, t: FloatType| -> bool {
+        let stop_eval = |solver: &OdeSolver| -> bool {
+            let (state, t) = solver.current_state();
             let pos = x0 + v0 * t + GRAVITY_ACCEL / 2.0 * t * t;
             let vel = v0 + GRAVITY_ACCEL * t;
 
@@ -254,30 +249,20 @@ mod tests {
         let mut ranges_iter = ranges.iter();
         let mut range_current = *ranges_iter.next().unwrap();
 
-        let mut state_old = State::new(x0, v0);
-        let mut t_old = 0.0;
-
-        let stop_eval = |state: &State, t: FloatType| -> bool {
-            let res = loop {
+        let stop_eval = |solver: &OdeSolver| -> bool {
+            let (state, _) = solver.current_state();
+            loop {
                 match state.pos.x.partial_cmp(&range_current) {
                     Some(ord) => match ord {
                         Ordering::Less => {
                             break false;
                         }
                         Ordering::Equal | Ordering::Greater => {
-                            let mut save = |state: &State, t: FloatType| {
+                            let extractor = |state: &State| -> FloatType { state.pos.x };
+                            let event = |x: FloatType| -> FloatType { x - range_current };
+                            if let Some((state, t)) = solver.find_state_at_event(extractor, event) {
                                 output.push((state.clone(), t));
-                            };
-
-                            if ord == Ordering::Equal {
-                                save(state, t);
-                            } else {
-                                let alpha = (range_current - state_old.pos.x)
-                                    / (state.pos.x - state_old.pos.x);
-                                let state_lerp = lerp(state_old, state.clone(), alpha);
-                                let t_lerp = lerp(t_old, t, alpha);
-                                save(&state_lerp, t_lerp);
-                            };
+                            }
 
                             match ranges_iter.next() {
                                 Some(r) => range_current = *r,
@@ -287,10 +272,7 @@ mod tests {
                     },
                     None => break true,
                 }
-            };
-            state_old = state.clone();
-            t_old = t;
-            res
+            }
         };
 
         calc_trajectory(

@@ -189,6 +189,18 @@ where
     v0 * (1.0 - alpha) + v1 * alpha
 }
 
+pub fn cubic_hermite_interpolation<T>(y0: T, y1: T, f0: T, f1: T, h: FloatType, t: FloatType) -> T
+where
+    T: Add<Output = T> + Mul<FloatType, Output = T>,
+{
+    let t2 = t * t;
+    let t3 = t2 * t;
+
+    let alpha = -2.0 * t3 + 3.0 * t2;
+
+    y0 * (1.0 - alpha) + f0 * h * (t3 - 2.0 * t2 + t) + y1 * alpha + f1 * h * (t3 - t2)
+}
+
 pub fn create_standard_drag_function(
     drag_function: StandardDragFunction,
     bc: FloatType,
