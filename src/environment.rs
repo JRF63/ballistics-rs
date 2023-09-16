@@ -17,11 +17,7 @@ pub fn calc_saturation_vapor_pressure_water(temp: FloatType) -> FloatType {
 }
 
 /// Calculates for the density of air, assuming air is an ideal gas.
-pub fn calc_air_density(
-    temp: FloatType,
-    pressure: FloatType,
-    rh: FloatType,
-) -> FloatType {
+pub fn calc_air_density(temp: FloatType, pressure: FloatType, rh: FloatType) -> FloatType {
     // Precomputed because Rust does not support const eval for floats.
     // Equal to:
     // let R: FloatType = 8.31446261815324; // J/(K*mol)
@@ -39,11 +35,7 @@ pub fn calc_air_density(
 }
 
 /// Calculates the speed of sound, assuming air is an ideal gas.
-pub fn calc_speed_sound(
-    temp: FloatType,
-    _pressure: FloatType,
-    rh: FloatType,
-) -> FloatType {
+pub fn calc_speed_sound(temp: FloatType, _pressure: FloatType, rh: FloatType) -> FloatType {
     // Precomputed because Rust does not support const eval for floats.
     // Equal to:
     // let gamma: FloatType = 1.4; // unitless

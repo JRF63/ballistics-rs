@@ -1,5 +1,5 @@
-use std::ops::{Add, AddAssign, Mul, MulAssign};
 use crate::prelude::*;
+use core::ops::{Add, AddAssign, Mul, MulAssign};
 
 #[derive(Clone, Copy)]
 pub struct State {

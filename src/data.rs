@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use std::ops::{Add, Mul};
+use core::ops::{Add, Mul};
 
 #[derive(Clone, Copy)]
 pub enum StandardDragFunction {

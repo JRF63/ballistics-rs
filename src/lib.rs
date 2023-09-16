@@ -16,3 +16,10 @@ extern "C" {
 pub fn greet() {
     alert("Hello, {{project-name}}!");
 }
+
+#[wasm_bindgen]
+pub fn array_test(arr: &mut [f64]) {
+    for x in arr.iter_mut() {
+        *x = 1.0;
+    }
+}

@@ -4,7 +4,6 @@ use crate::{
     solver::OdeSolver,
     state::State,
 };
-use std::cmp::Ordering;
 
 pub fn calc_trajectory<F, G>(
     x0: Vector3,
@@ -102,26 +101,20 @@ where
 
         let range_reached = |solver: &OdeSolver| -> bool {
             let (state, _) = solver.current_state();
-            match state.pos.x.partial_cmp(&zero_range) {
-                Some(ord) => match ord {
-                    Ordering::Less => false,
-                    Ordering::Equal => {
-                        drop = state.pos.z;
-                        windage = state.pos.y;
-                        true
-                    }
-                    Ordering::Greater => {
-                        let extractor = |state: &State| -> FloatType { state.pos.x };
-                        let event = |x: FloatType| -> FloatType { x - zero_range };
-                        if let Some((state, _)) = solver.find_state_at_event(extractor, event) {
-                            drop = state.pos.z;
-                            windage = state.pos.y;
-                        }
-                        // Stop evaluation whether interpolation is successful or not
-                        true
-                    }
-                },
-                None => false,
+            if state.pos.x < zero_range {
+                false
+            } else {
+                // This branch also handles the situation where `state.pos.x` is exactly equal to
+                // `zero_range`
+
+                let extractor = |state: &State| -> FloatType { state.pos.x };
+                let event = |x: FloatType| -> FloatType { x - zero_range };
+                if let Some((state, _)) = solver.find_state_at_event(extractor, event) {
+                    drop = state.pos.z;
+                    windage = state.pos.y;
+                }
+                // Stop evaluation whether interpolation is successful or not
+                true
             }
         };
 
@@ -186,6 +179,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    //! Validation data from JBM Ballistics calc
+    //! https://www.jbmballistics.com/cgi-bin/jbmtraj-5.1.cgi
+
     use super::*;
     use crate::data::{almost_equal, create_standard_drag_function, StandardDragFunction};
 
@@ -196,7 +192,7 @@ mod tests {
     const PASCALS_PER_MILLIBAR: FloatType = 100.0;
     const KELVIN_OFFSET: FloatType = 273.15;
 
-    // Example 8.1 of Modern Exterior Ballistics
+    /// Example 8.1 of Modern Exterior Ballistics
     #[test]
     fn test_vacuum_trajectory() {
         let muzzle_speed = 80.0;
@@ -228,61 +224,7 @@ mod tests {
         );
     }
 
-    fn calc_trajectory_on_range_intervals<F>(
-        x0: Vector3,
-        v0: Vector3,
-        drag_func: F,
-        wind: Vector3,
-        temp: FloatType,
-        pressure: FloatType,
-        rh: FloatType,
-        elevation: FloatType,
-        dt: FloatType,
-        t_max: FloatType,
-        ranges: Vec<FloatType>,
-    ) -> Vec<(State, FloatType)>
-    where
-        F: Fn(FloatType) -> FloatType,
-    {
-        let mut output = Vec::with_capacity(ranges.len());
-
-        let mut ranges_iter = ranges.iter();
-        let mut range_current = *ranges_iter.next().unwrap();
-
-        let stop_eval = |solver: &OdeSolver| -> bool {
-            let (state, _) = solver.current_state();
-            loop {
-                match state.pos.x.partial_cmp(&range_current) {
-                    Some(ord) => match ord {
-                        Ordering::Less => {
-                            break false;
-                        }
-                        Ordering::Equal | Ordering::Greater => {
-                            let extractor = |state: &State| -> FloatType { state.pos.x };
-                            let event = |x: FloatType| -> FloatType { x - range_current };
-                            if let Some((state, t)) = solver.find_state_at_event(extractor, event) {
-                                output.push((state.clone(), t));
-                            }
-
-                            match ranges_iter.next() {
-                                Some(r) => range_current = *r,
-                                None => break true,
-                            }
-                        }
-                    },
-                    None => break true,
-                }
-            }
-        };
-
-        calc_trajectory(
-            x0, v0, drag_func, wind, temp, pressure, rh, elevation, dt, t_max, stop_eval,
-        );
-
-        output
-    }
-
-    fn test_trajectory(
+    fn calc_trajectory_on_range_intervals(
         x0: Vector3,
         v0: Vector3,
         drag_func_type: StandardDragFunction,
@@ -306,41 +248,56 @@ mod tests {
     ) {
         let drag_func = create_standard_drag_function(drag_func_type, bc);
 
-        let ranges: Vec<_> = reference.iter().map(|x| x.0).collect();
+        let mut ref_vals_iter = reference.iter().peekable();
 
-        let trajectory = calc_trajectory_on_range_intervals(
-            x0, v0, drag_func, wind, temp, pressure, rh, elevation, dt, t_max, ranges,
+        let stop_eval = |solver: &OdeSolver| -> bool {
+            let (state, _) = solver.current_state();
+
+            // like take_while but does not consume the value when the predicate is false
+            for ref_data in core::iter::from_fn(|| ref_vals_iter.next_if(|&&r| state.pos.x >= r.0))
+            {
+                let extractor = |state: &State| -> FloatType { state.pos.x };
+                let event = |x: FloatType| -> FloatType { x - ref_data.0 };
+                if let Some((state, t)) = solver.find_state_at_event(extractor, event) {
+                    let x = state.pos.x.round();
+                    let z = (state.pos.z / M_PER_IN * 10.0).round() / 10.0;
+                    let y = (state.pos.y / M_PER_IN * 10.0).round() / 10.0;
+                    let speed = (state.vel.length() * 10.0).round() / 10.0;
+                    let t = (t * 1e3).round() / 1e3;
+
+                    let drop_moa = if state.pos.x == 0.0 {
+                        0.0
+                    } else {
+                        ((state.pos.z / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+                    };
+
+                    let windage_moa = if state.pos.x == 0.0 {
+                        0.0
+                    } else {
+                        ((state.pos.y / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+                    };
+
+                    assert!(almost_equal(x, ref_data.0, EPSILON));
+                    assert!(almost_equal(z, ref_data.1, EPSILON));
+                    assert!(almost_equal(drop_moa, ref_data.2, EPSILON));
+                    assert!(almost_equal(y, ref_data.3, EPSILON));
+                    assert!(almost_equal(windage_moa, ref_data.4, EPSILON));
+                    assert!(almost_equal(speed, ref_data.5, EPSILON));
+                    assert!(almost_equal(t, ref_data.6, EPSILON));
+
+                    // println!(
+                    //     "{:4.0} {:7.1} {:7.1} {:7.1} {:7.1} {:7.1} {:4.3}",
+                    //     x, z, drop_moa, y, windage_moa, speed, t
+                    // );
+                }
+            }
+
+            ref_vals_iter.len() == 0
+        };
+
+        calc_trajectory(
+            x0, v0, drag_func, wind, temp, pressure, rh, elevation, dt, t_max, stop_eval,
         );
-
-        assert_eq!(reference.len(), trajectory.len());
-
-        for ((state, t), ref_data) in trajectory.iter().zip(reference) {
-            let x = state.pos.x.round();
-            let z = (state.pos.z / M_PER_IN * 10.0).round() / 10.0;
-            let y = (state.pos.y / M_PER_IN * 10.0).round() / 10.0;
-            let speed = (state.vel.length() * 10.0).round() / 10.0;
-            let t = (t * 1e3).round() / 1e3;
-
-            let drop_moa = if state.pos.x == 0.0 {
-                0.0
-            } else {
-                ((state.pos.z / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
-            };
-
-            let windage_moa = if state.pos.x == 0.0 {
-                0.0
-            } else {
-                ((state.pos.y / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
-            };
-
-            assert!(almost_equal(x, ref_data.0, EPSILON));
-            assert!(almost_equal(z, ref_data.1, EPSILON));
-            assert!(almost_equal(drop_moa, ref_data.2, EPSILON));
-            assert!(almost_equal(y, ref_data.3, EPSILON));
-            assert!(almost_equal(windage_moa, ref_data.4, EPSILON));
-            assert!(almost_equal(speed, ref_data.5, EPSILON));
-            assert!(almost_equal(t, ref_data.6, EPSILON));
-        }
     }
 
     #[test]
@@ -385,7 +342,7 @@ mod tests {
         let x0 = Vector3::new(0.0, 0.0, elevation - sight_height);
         let v0 = Vector3::new(muzzle_speed, 0.0, 0.0);
 
-        test_trajectory(
+        calc_trajectory_on_range_intervals(
             x0,
             v0,
             drag_func_type,
@@ -403,8 +360,6 @@ mod tests {
 
     #[test]
     fn test_flat_fire_trajectory_strong_wind() {
-        // Validation data using JBM Ballistics calc
-        // https://www.jbmballistics.com/cgi-bin/jbmtraj-5.1.cgi
         let reference = &[
             (0.0, -1.5, 0.0, 0.0, 0.0, 1000.0, 0.000),
             (100.0, -3.5, -3.1, 0.7, 0.6, 933.3, 0.104),
@@ -446,7 +401,7 @@ mod tests {
         let x0 = Vector3::new(0.0, 0.0, elevation - sight_height);
         let v0 = Vector3::new(muzzle_speed, 0.0, 0.0);
 
-        test_trajectory(
+        calc_trajectory_on_range_intervals(
             x0,
             v0,
             drag_func_type,
@@ -532,7 +487,7 @@ mod tests {
                 ver_angle.sin() * hor_angle.cos(),
             );
 
-        test_trajectory(
+        calc_trajectory_on_range_intervals(
             x0,
             v0,
             drag_func_type,

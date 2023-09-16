@@ -1,5 +1,5 @@
 use crate::{data::cubic_hermite_interpolation, prelude::*, state::State};
-use std::{
+use core::{
     cmp::Ordering,
     ops::{Add, Mul},
 };
@@ -69,15 +69,17 @@ impl RK4 {
         let f1 = extractor(&self.yp);
 
         let event_prev = event(y0);
+        let event_now = event(y1);
+
+        // If the target event is reached at the boundaries, return them immediately
         if event_prev == 0.0 {
             return Some((self.y_prev, self.t_prev));
         }
-        let event_now = event(y1);
         if event_now == 0.0 {
             return Some((self.y, self.t));
         }
 
-        // Zero needs to be crossed within the interval
+        // One end should be positive while the other is negative for the zero crossing
         if event_prev * event_now < 0.0 {
             let mut low = 0.0;
             let mut high = 1.0;
@@ -86,9 +88,8 @@ impl RK4 {
             let low_is_negative = event_prev.is_sign_negative();
 
             for _ in 0..MAX_ITERS {
-                let event_guess =
-                    event(cubic_hermite_interpolation(y0, y1, f0, f1, self.dt, theta));
-                match event_guess.total_cmp(&0.0) {
+                let root = cubic_hermite_interpolation(y0, y1, f0, f1, self.dt, theta);
+                match event(root).total_cmp(&0.0) {
                     Ordering::Less => {
                         if low_is_negative {
                             low = theta;
