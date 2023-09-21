@@ -38,11 +38,11 @@ pub fn calc_trajectory<F, G>(
     let y0 = State::new(x0, v0);
     let mut solver = OdeSolver::new(y0, derivative, dt);
     loop {
-        solver.step(derivative);
         let (_, _, t) = solver.current_state();
         if t > t_max || stop_eval(&solver) {
             break;
         }
+        solver.step(derivative);
     }
 }
 
