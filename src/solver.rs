@@ -51,8 +51,8 @@ impl RK4 {
         self.t += self.dt;
     }
 
-    pub fn current_state(&self) -> (&State, FloatType) {
-        (&self.y, self.t)
+    pub fn current_state(&self) -> (&State, &State, FloatType) {
+        (&self.y, &self.yp, self.t)
     }
 
     pub fn find_state_at_event<E, F, G>(&self, extractor: F, event: G) -> Option<(State, FloatType)>

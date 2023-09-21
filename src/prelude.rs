@@ -1,6 +1,7 @@
 pub use crate::{
     data::{create_standard_drag_function, cubic_hermite_interpolation, StandardDragFunction},
     trajectory::{calc_trajectory, solve_initial_velocity},
+    solver::OdeSolver,
 };
 
 pub type FloatType = f64;

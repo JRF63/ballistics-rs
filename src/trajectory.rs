@@ -39,7 +39,7 @@ pub fn calc_trajectory<F, G>(
     let mut solver = OdeSolver::new(y0, derivative, dt);
     loop {
         solver.step(derivative);
-        let (_, t) = solver.current_state();
+        let (_, _, t) = solver.current_state();
         if t > t_max || stop_eval(&solver) {
             break;
         }
@@ -100,7 +100,7 @@ where
         let mut windage = FloatType::NAN;
 
         let range_reached = |solver: &OdeSolver| -> bool {
-            let (state, _) = solver.current_state();
+            let (state, _, _) = solver.current_state();
             if state.pos.x < zero_range {
                 false
             } else {
@@ -210,7 +210,7 @@ mod tests {
         let drag_func = |_: FloatType| -> FloatType { 0.0 };
 
         let stop_eval = |solver: &OdeSolver| -> bool {
-            let (state, t) = solver.current_state();
+            let (state, _, t) = solver.current_state();
             let pos = x0 + v0 * t + GRAVITY_ACCEL / 2.0 * t * t;
             let vel = v0 + GRAVITY_ACCEL * t;
 
@@ -251,7 +251,7 @@ mod tests {
         let mut ref_vals_iter = reference.iter().peekable();
 
         let stop_eval = |solver: &OdeSolver| -> bool {
-            let (state, _) = solver.current_state();
+            let (state, _, _) = solver.current_state();
 
             // like take_while but does not consume the value when the predicate is false
             for ref_data in core::iter::from_fn(|| ref_vals_iter.next_if(|&&r| state.pos.x >= r.0))
