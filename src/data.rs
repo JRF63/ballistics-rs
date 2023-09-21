@@ -177,6 +177,7 @@ const G7: [(FloatType, FloatType); 84] = [
 ];
 
 /// Tests if `val` is almost equal to `reference`.
+#[cfg(test)]
 pub fn almost_equal(val: FloatType, reference: FloatType, epsilon: FloatType) -> bool {
     (val - reference).abs() <= epsilon * reference.abs()
 }
