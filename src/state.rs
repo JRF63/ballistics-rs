@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use core::ops::{Add, AddAssign, Mul, MulAssign};
+use core::ops::{Add, AddAssign, Mul, MulAssign, Sub};
 
 #[derive(Clone, Copy)]
 pub struct State {
@@ -28,6 +28,17 @@ impl AddAssign<State> for State {
     fn add_assign(&mut self, rhs: State) {
         self.pos += rhs.pos;
         self.vel += rhs.vel;
+    }
+}
+
+impl Sub<State> for State {
+    type Output = State;
+
+    fn sub(self, rhs: State) -> Self::Output {
+        State {
+            pos: self.pos - rhs.pos,
+            vel: self.vel - rhs.vel,
+        }
     }
 }
 
