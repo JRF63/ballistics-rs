@@ -2,7 +2,6 @@ use crate::{
     environment::{calc_air_density, calc_speed_sound},
     prelude::*,
     solver::OdeSolver,
-    state::State,
 };
 
 pub fn calc_trajectory<F, G>(
@@ -25,17 +24,17 @@ pub fn calc_trajectory<F, G>(
         let air_density = calc_air_density(temp, pressure, rh);
         let speed_sound = calc_speed_sound(temp, pressure, rh);
 
-        let vw = state.vel - wind;
-        let speed = vw.length();
+        let vw = state.vel() - wind;
+        let speed = vw.norm();
         let mach_num = speed / speed_sound;
 
-        let dx = state.vel;
+        let dx = state.vel();
         let dv = vw * (-(air_density * drag_func(mach_num)) * speed) + GRAVITY_ACCEL;
 
-        State::new(dx, dv)
+        State::from_pos_and_vel(dx, dv)
     };
 
-    let y0 = State::new(x0, v0);
+    let y0 = State::from_pos_and_vel(x0, v0);
     let mut solver = OdeSolver::new(y0, derivative, dt);
     loop {
         let (_, _, t) = solver.current_state();
@@ -101,17 +100,17 @@ where
 
         let range_reached = |solver: &OdeSolver| -> bool {
             let (state, _, _) = solver.current_state();
-            if state.pos.x < zero_range {
+            if state.pos().x < zero_range {
                 false
             } else {
-                // This branch also handles the situation where `state.pos.x` is exactly equal to
+                // This branch also handles the situation where `state.pos().x` is exactly equal to
                 // `zero_range`
 
-                let extractor = |state: &State| -> FloatType { state.pos.x };
+                let extractor = |state: &State| -> FloatType { state.pos().x };
                 let event = |x: FloatType| -> FloatType { x - zero_range };
                 if let Some((state, _)) = solver.find_state_at_event(extractor, event) {
-                    drop = state.pos.z;
-                    windage = state.pos.y;
+                    drop = state.pos().z;
+                    windage = state.pos().y;
                 }
                 // Stop evaluation whether interpolation is successful or not
                 true
@@ -197,9 +196,9 @@ mod tests {
     fn test_vacuum_trajectory() {
         let muzzle_speed = 80.0;
         let firing_angle = FloatType::to_radians(2005.03 / 60.0);
-        let x0 = Vector3::ZERO;
+        let x0 = Vector3::zeros();
         let v0 = muzzle_speed * Vector3::new(firing_angle.cos(), 0.0, firing_angle.sin());
-        let wind = Vector3::ZERO;
+        let wind = Vector3::zeros();
         let temp = 273.15;
         let pressure = 101325.0;
         let rh = 0.0;
@@ -214,8 +213,8 @@ mod tests {
             let pos = x0 + v0 * t + GRAVITY_ACCEL / 2.0 * t * t;
             let vel = v0 + GRAVITY_ACCEL * t;
 
-            assert!((state.pos - pos).length() < EPSILON);
-            assert!((state.vel - vel).length() < EPSILON);
+            assert!((state.pos() - pos).norm() < EPSILON);
+            assert!((state.vel() - vel).norm() < EPSILON);
             false
         };
 
@@ -254,27 +253,30 @@ mod tests {
             let (state, _, _) = solver.current_state();
 
             // like take_while but does not consume the value when the predicate is false
-            for ref_data in core::iter::from_fn(|| ref_vals_iter.next_if(|&&r| state.pos.x >= r.0))
+            for ref_data in
+                core::iter::from_fn(|| ref_vals_iter.next_if(|&&r| state.pos().x >= r.0))
             {
-                let extractor = |state: &State| -> FloatType { state.pos.x };
+                let extractor = |state: &State| -> FloatType { state.pos().x };
                 let event = |x: FloatType| -> FloatType { x - ref_data.0 };
                 if let Some((state, t)) = solver.find_state_at_event(extractor, event) {
-                    let x = state.pos.x.round();
-                    let z = (state.pos.z / M_PER_IN * 10.0).round() / 10.0;
-                    let y = (state.pos.y / M_PER_IN * 10.0).round() / 10.0;
-                    let speed = (state.vel.length() * 10.0).round() / 10.0;
+                    let x = state.pos().x.round();
+                    let z = (state.pos().z / M_PER_IN * 10.0).round() / 10.0;
+                    let y = (state.pos().y / M_PER_IN * 10.0).round() / 10.0;
+                    let speed = (state.vel().norm() * 10.0).round() / 10.0;
                     let t = (t * 1e3).round() / 1e3;
 
-                    let drop_moa = if state.pos.x == 0.0 {
+                    let drop_moa = if state.pos().x == 0.0 {
                         0.0
                     } else {
-                        ((state.pos.z / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+                        ((state.pos().z / state.pos().x).atan().to_arcminute() * 10.0).round()
+                            / 10.0
                     };
 
-                    let windage_moa = if state.pos.x == 0.0 {
+                    let windage_moa = if state.pos().x == 0.0 {
                         0.0
                     } else {
-                        ((state.pos.y / state.pos.x).atan().to_arcminute() * 10.0).round() / 10.0
+                        ((state.pos().y / state.pos().x).atan().to_arcminute() * 10.0).round()
+                            / 10.0
                     };
 
                     assert!(almost_equal(x, ref_data.0, EPSILON));
@@ -331,7 +333,7 @@ mod tests {
 
         let drag_func_type = StandardDragFunction::G1;
         let bc = 0.5 * KG_PER_LB / (M_PER_IN * M_PER_IN);
-        let wind = Vector3::ZERO;
+        let wind = Vector3::zeros();
         let temp = 25.0 + KELVIN_OFFSET; // 25 degC
         let pressure = 1013.25 * PASCALS_PER_MILLIBAR; // 1013.25 millibars
         let rh = 0.0;

@@ -1,61 +1,26 @@
-use crate::prelude::*;
-use core::ops::{Add, AddAssign, Mul, MulAssign, Sub};
+pub type FloatType = f64;
+pub type Vector3 = nalgebra::base::Vector3<FloatType>;
 
-#[derive(Clone, Copy)]
-pub struct State {
-    pub pos: Vector3,
-    pub vel: Vector3,
+pub type State = nalgebra::base::Vector6<FloatType>;
+
+pub trait StateTrait {
+    fn from_pos_and_vel(x0: Vector3, v0: Vector3) -> Self;
+
+    fn pos(&self) -> Vector3;
+
+    fn vel(&self) -> Vector3;
 }
 
-impl State {
-    pub fn new(x0: Vector3, v0: Vector3) -> Self {
-        Self { pos: x0, vel: v0 }
+impl StateTrait for State {
+    fn from_pos_and_vel(x0: Vector3, v0: Vector3) -> Self {
+        State::new(x0.x, x0.y, x0.z, v0.x, v0.y, v0.z)
     }
-}
 
-impl Add<State> for State {
-    type Output = State;
-
-    fn add(self, rhs: State) -> Self::Output {
-        State {
-            pos: self.pos + rhs.pos,
-            vel: self.vel + rhs.vel,
-        }
+    fn pos(&self) -> Vector3 {
+        Vector3::new(self.x, self.y, self.z)
     }
-}
 
-impl AddAssign<State> for State {
-    fn add_assign(&mut self, rhs: State) {
-        self.pos += rhs.pos;
-        self.vel += rhs.vel;
-    }
-}
-
-impl Sub<State> for State {
-    type Output = State;
-
-    fn sub(self, rhs: State) -> Self::Output {
-        State {
-            pos: self.pos - rhs.pos,
-            vel: self.vel - rhs.vel,
-        }
-    }
-}
-
-impl Mul<FloatType> for State {
-    type Output = State;
-
-    fn mul(self, rhs: FloatType) -> Self::Output {
-        State {
-            pos: self.pos * rhs,
-            vel: self.vel * rhs,
-        }
-    }
-}
-
-impl MulAssign<FloatType> for State {
-    fn mul_assign(&mut self, rhs: FloatType) {
-        self.pos *= rhs;
-        self.vel *= rhs;
+    fn vel(&self) -> Vector3 {
+        Vector3::new(self.w, self.a, self.b)
     }
 }
